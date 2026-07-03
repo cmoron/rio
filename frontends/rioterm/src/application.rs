@@ -516,6 +516,11 @@ impl ApplicationHandler<EventPayload> for Application<'_> {
                     } else {
                         let size = route.window.screen.context_manager.len();
                         route.window.screen.resize_top_or_bottom_line(size);
+                        // The context was removed and current switched to a
+                        // survivor, but nothing marked it dirty — render() gates
+                        // the GPU present on that flag, so the closed tab lingered
+                        // until the next event. Repaint the tab bar now.
+                        route.request_overlay_redraw();
                     }
                 }
             }
