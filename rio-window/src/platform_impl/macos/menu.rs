@@ -58,17 +58,13 @@ pub fn initialize(app: &NSApplication) {
         }),
     );
 
-    // Hide application menu item
+    // Hide application menu item.
+    // No ⌘H key equivalent on purpose: the main menu consumes key equivalents
+    // before they reach the window's keyDown/bindings, so keeping ⌘H here would
+    // shadow any user binding on ⌘H (e.g. `selectsplitleft`). Hide stays
+    // clickable in the menu; ⌘H is left free for `[bindings]`.
     let hide_item_title = ns_string!("Hide ").stringByAppendingString(&process_name);
-    let hide_item = menu_item(
-        mtm,
-        &hide_item_title,
-        Some(sel!(hide:)),
-        Some(KeyEquivalent {
-            key: ns_string!("h"),
-            masks: None,
-        }),
-    );
+    let hide_item = menu_item(mtm, &hide_item_title, Some(sel!(hide:)), None);
 
     // Hide other applications menu item
     let hide_others_item_title = ns_string!("Hide Others");
