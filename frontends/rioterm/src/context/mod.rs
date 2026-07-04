@@ -8,7 +8,7 @@ use crate::context::title::{
 use crate::event::sync::FairMutex;
 use crate::event::{Msg, RioEvent};
 use crate::ime::Ime;
-pub use crate::layout::{ContextDimension, ContextGrid, ContextGridItem};
+pub use crate::layout::{ContextDimension, ContextGrid, ContextGridItem, SplitDirection};
 use crate::messenger::Messenger;
 use crate::performer::{self, Machine};
 use renderable::Cursor;
@@ -592,6 +592,13 @@ impl<T: EventListener + Clone + std::marker::Send + 'static> ContextManager<T> {
     pub fn select_prev_split(&mut self) {
         self.contexts[self.current_index].select_prev_split();
         self.current_route = self.current().route_id;
+    }
+
+    #[inline]
+    pub fn select_split(&mut self, dir: SplitDirection) {
+        if self.contexts[self.current_index].select_split(dir) {
+            self.current_route = self.current().route_id;
+        }
     }
 
     #[inline]

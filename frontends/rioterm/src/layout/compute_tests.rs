@@ -647,3 +647,32 @@ fn test_split_inside_resized_panel_preserves_proportions() {
         "Bottom (bottom half) should be ~400px tall, got {bottom_h}"
     );
 }
+
+/// Directional split focus over the common layout: a full-height left
+/// pane and a right column split into top/bottom.
+#[test]
+fn directional_split_focus() {
+    use SplitDirection::{Down, Left, Right, Up};
+
+    let left = [0.0, 0.0, 100.0, 200.0];
+    let right_top = [100.0, 0.0, 100.0, 100.0];
+    let right_bottom = [100.0, 100.0, 100.0, 100.0];
+    // Indices: 0 = left, 1 = right_top, 2 = right_bottom.
+    let cands = [left, right_top, right_bottom];
+
+    // From either right pane, Left lands on the left pane (it overlaps
+    // both vertically) — the exact case next/prev gets wrong.
+    assert_eq!(pick_directional(right_top, &cands, Left), Some(0));
+    assert_eq!(pick_directional(right_bottom, &cands, Left), Some(0));
+
+    // From the left pane, Right resolves the tie to the topmost pane.
+    assert_eq!(pick_directional(left, &cands, Right), Some(1));
+
+    // Vertical moves stay inside the right column.
+    assert_eq!(pick_directional(right_top, &cands, Down), Some(2));
+    assert_eq!(pick_directional(right_bottom, &cands, Up), Some(1));
+
+    // No neighbour: nothing above the top row, nothing left of the left.
+    assert_eq!(pick_directional(right_top, &cands, Up), None);
+    assert_eq!(pick_directional(left, &cands, Left), None);
+}
