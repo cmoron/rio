@@ -1,16 +1,16 @@
-name: Perso Build
+name: MNC Build
 
 # Fork-only pipeline (cmoron/rio). Self-contained: no goreleaser-pro, no secrets.
-# - push on `perso`        -> build macOS arm64 + Windows x86_64, upload artifacts
-# - push tag `perso-v*`    -> same build, then publish a GitHub Release with the binaries
+# - push on `mnc`          -> build macOS arm64 + Windows x86_64, upload artifacts
+# - push tag `mnc-v*`      -> same build, then publish a GitHub Release with the binaries
 on:
   push:
-    branches: [perso]
-    tags: ['perso-v*']
+    branches: [mnc]
+    tags: ['mnc-v*']
   workflow_dispatch:
 
 concurrency:
-  group: perso-build-${{ github.ref }}
+  group: mnc-build-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -53,7 +53,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: startsWith(github.ref, 'refs/tags/perso-v')
+    if: startsWith(github.ref, 'refs/tags/mnc-v')
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -67,9 +67,9 @@ jobs:
         with:
           files: dist/*
           tag_name: ${{ github.ref_name }}
-          name: Rio perso ${{ github.ref_name }}
+          name: Rio mnc ${{ github.ref_name }}
           body: |
-            Build perso de rio (`${{ github.ref_name }}`) — macOS arm64 + Windows x86_64.
+            Build mnc de rio (`${{ github.ref_name }}`) — macOS arm64 + Windows x86_64.
 
             **macOS** : binaire non signé, dé-quarantaine avant lancement :
             `chmod +x rio-macos-arm64 && xattr -dr com.apple.quarantine rio-macos-arm64`
