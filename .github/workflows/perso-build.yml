@@ -1,0 +1,77 @@
+name: Perso Build
+
+# Fork-only pipeline (cmoron/rio). Self-contained: no goreleaser-pro, no secrets.
+# - push on `perso`        -> build macOS arm64 + Windows x86_64, upload artifacts
+# - push tag `perso-v*`    -> same build, then publish a GitHub Release with the binaries
+on:
+  push:
+    branches: [perso]
+    tags: ['perso-v*']
+  workflow_dispatch:
+
+concurrency:
+  group: perso-build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            ext: '.exe'
+            label: windows-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            ext: ''
+            label: macos-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      # rust-toolchain.toml pins 1.96; just add the (native) target for it.
+      - run: rustup target add ${{ matrix.target }}
+      - name: Build
+        run: cargo build --release -p rioterm --features wgpu --target ${{ matrix.target }}
+      - name: Stage binary
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp "target/${{ matrix.target }}/release/rio${{ matrix.ext }}" \
+             "dist/rio-${{ matrix.label }}${{ matrix.ext }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rio-${{ matrix.label }}
+          path: dist/rio-${{ matrix.label }}${{ matrix.ext }}
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/perso-v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          tag_name: ${{ github.ref_name }}
+          name: Rio perso ${{ github.ref_name }}
+          body: |
+            Build perso de rio (`${{ github.ref_name }}`) — macOS arm64 + Windows x86_64.
+
+            **macOS** : binaire non signé, dé-quarantaine avant lancement :
+            `chmod +x rio-macos-arm64 && xattr -dr com.apple.quarantine rio-macos-arm64`
+          generate_release_notes: false
+          fail_on_unmatched_files: true
