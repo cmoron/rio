@@ -74,6 +74,7 @@ jobs:
             -ext WixToolset.UI.wixext `
             -ext WixToolset.Util.wixext `
             -o "dist/rio-${{ matrix.label }}.msi"
+          Remove-Item "dist/rio-${{ matrix.label }}.wixpdb" -ErrorAction SilentlyContinue
       - uses: actions/upload-artifact@v4
         with:
           name: rio-${{ matrix.label }}
@@ -95,7 +96,9 @@ jobs:
           path: dist
       - uses: softprops/action-gh-release@v2
         with:
-          files: dist/*
+          files: |
+            dist/rio-windows-x86_64.exe
+            dist/rio-windows-x86_64.msi
           tag_name: ${{ github.ref_name }}
           name: Rio mnc ${{ github.ref_name }}
           body: |
