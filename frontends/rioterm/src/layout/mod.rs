@@ -26,6 +26,73 @@ pub enum BorderDirection {
     Horizontal,
 }
 
+/// Direction for directional split focus (vim-style h/j/k/l).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SplitDirection {
+    Left,
+    Right,
+    Up,
+    Down,
+}
+
+/// Pick the split adjacent to `current` in `dir` among `candidates`
+/// (each `[x, y, w, h]` in absolute physical pixels). Returns the index
+/// into `candidates` of the neighbour that shares an edge in that
+/// direction: nearest along the axis, tie-broken by largest overlap on
+/// the perpendicular axis. The current split is skipped naturally (it is
+/// never on its own side).
+// ponytail: requires perpendicular overlap so focus never jumps
+// diagonally; no fallback for fully-disjoint layouts because splits
+// always tile the grid. Add a nearest-center fallback if free-floating
+// panels ever exist.
+fn pick_directional(
+    current: [f32; 4],
+    candidates: &[[f32; 4]],
+    dir: SplitDirection,
+) -> Option<usize> {
+    const EPS: f32 = 1.0;
+    let [cx, cy, cw, ch] = current;
+
+    let mut best: Option<(usize, f32, f32)> = None; // (index, axial, overlap)
+    for (i, &[x, y, w, h]) in candidates.iter().enumerate() {
+        // Gap along the travel axis; negative means the candidate is not
+        // on the requested side.
+        let axial = match dir {
+            SplitDirection::Left => cx - (x + w),
+            SplitDirection::Right => x - (cx + cw),
+            SplitDirection::Up => cy - (y + h),
+            SplitDirection::Down => y - (cy + ch),
+        };
+        if axial < -EPS {
+            continue;
+        }
+
+        // Overlap on the perpendicular axis; must be positive to share
+        // an edge rather than sit diagonally.
+        let overlap = match dir {
+            SplitDirection::Left | SplitDirection::Right => {
+                (cy + ch).min(y + h) - cy.max(y)
+            }
+            SplitDirection::Up | SplitDirection::Down => (cx + cw).min(x + w) - cx.max(x),
+        };
+        if overlap <= 0.0 {
+            continue;
+        }
+
+        let axial = axial.max(0.0);
+        let better = match best {
+            None => true,
+            Some((_, ba, bo)) => {
+                axial < ba - EPS || ((axial - ba).abs() <= EPS && overlap > bo)
+            }
+        };
+        if better {
+            best = Some((i, axial, overlap));
+        }
+    }
+    best.map(|(i, _, _)| i)
+}
+
 /// Describes a draggable border between two panels
 #[derive(Debug, Clone, Copy)]
 pub struct PanelBorder {
@@ -967,6 +1034,34 @@ impl<T: rio_backend::event::EventListener> ContextGrid<T> {
         });
 
         panels.into_iter().map(|(id, _, _)| id).collect()
+    }
+
+    /// Move focus to the split adjacent in `dir`. Returns true when focus
+    /// actually moved. Unlike next/prev this is spatial: from either the
+    /// top-right or bottom-right pane, `Left` lands on the full-height
+    /// left pane. No wrap-around.
+    #[inline]
+    pub fn select_split(&mut self, dir: SplitDirection) -> bool {
+        if self.inner.len() <= 1 {
+            return false;
+        }
+        let current = match self.inner.get(&self.current) {
+            Some(item) => item.layout_rect,
+            None => return false,
+        };
+        // Ordered keys give ties (e.g. left→right) a deterministic
+        // topmost-leftmost winner.
+        let keys = self.get_ordered_keys();
+        let candidates: Vec<[f32; 4]> =
+            keys.iter().map(|k| self.inner[k].layout_rect).collect();
+        if let Some(idx) = pick_directional(current, &candidates, dir) {
+            let target = keys[idx];
+            if target != self.current {
+                self.current = target;
+                return true;
+            }
+        }
+        false
     }
 
     #[inline]
