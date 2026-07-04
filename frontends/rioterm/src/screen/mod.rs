@@ -25,7 +25,7 @@ use crate::crosswords::{
     Mode,
 };
 use crate::hints::HintState;
-use crate::layout::ContextDimension;
+use crate::layout::{ContextDimension, SplitDirection};
 use crate::mouse::{calculate_mouse_position, Mouse};
 use crate::renderer::{utils::padding_top_from_config, Renderer};
 use crate::screen::hint::HintMatches;
@@ -1261,6 +1261,26 @@ impl Screen<'_> {
                     Act::SelectPrevSplit => {
                         self.cancel_search(clipboard);
                         self.context_manager.select_prev_split();
+                        self.mark_dirty();
+                    }
+                    Act::SelectSplitLeft => {
+                        self.cancel_search(clipboard);
+                        self.context_manager.select_split(SplitDirection::Left);
+                        self.mark_dirty();
+                    }
+                    Act::SelectSplitRight => {
+                        self.cancel_search(clipboard);
+                        self.context_manager.select_split(SplitDirection::Right);
+                        self.mark_dirty();
+                    }
+                    Act::SelectSplitUp => {
+                        self.cancel_search(clipboard);
+                        self.context_manager.select_split(SplitDirection::Up);
+                        self.mark_dirty();
+                    }
+                    Act::SelectSplitDown => {
+                        self.cancel_search(clipboard);
+                        self.context_manager.select_split(SplitDirection::Down);
                         self.mark_dirty();
                     }
                     Act::SelectNextSplitOrTab => {

@@ -258,6 +258,10 @@ impl From<String> for Action {
             "selectprevsplit" => Some(Action::SelectPrevSplit),
             "selectnextsplitortab" => Some(Action::SelectNextSplitOrTab),
             "selectprevsplitortab" => Some(Action::SelectPrevSplitOrTab),
+            "selectsplitleft" => Some(Action::SelectSplitLeft),
+            "selectsplitright" => Some(Action::SelectSplitRight),
+            "selectsplitup" => Some(Action::SelectSplitUp),
+            "selectsplitdown" => Some(Action::SelectSplitDown),
             "movedividerup" => Some(Action::MoveDividerUp),
             "movedividerdown" => Some(Action::MoveDividerDown),
             "movedividerleft" => Some(Action::MoveDividerLeft),
@@ -489,6 +493,18 @@ pub enum Action {
 
     /// Select previous split if available if not previous tab
     SelectPrevSplitOrTab,
+
+    /// Select the split to the left (directional focus)
+    SelectSplitLeft,
+
+    /// Select the split to the right (directional focus)
+    SelectSplitRight,
+
+    /// Select the split above (directional focus)
+    SelectSplitUp,
+
+    /// Select the split below (directional focus)
+    SelectSplitDown,
 
     /// Move divider up
     MoveDividerUp,
