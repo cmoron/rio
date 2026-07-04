@@ -144,6 +144,49 @@ pub fn tab_strip_layout(
     }
 }
 
+#[inline]
+fn valid_scale_factor(scale_factor: f32) -> f32 {
+    if scale_factor.is_finite() && scale_factor > 0.0 {
+        scale_factor
+    } else {
+        1.0
+    }
+}
+
+#[inline]
+fn physical_pixel(scale_factor: f32) -> f32 {
+    1.0 / valid_scale_factor(scale_factor)
+}
+
+#[inline]
+fn snap_to_physical_pixel(value: f32, scale_factor: f32) -> f32 {
+    let scale_factor = valid_scale_factor(scale_factor);
+    (value * scale_factor).round() / scale_factor
+}
+
+#[inline]
+fn physical_pixel_span(start: f32, width: f32, scale_factor: f32) -> (f32, f32) {
+    let scale_factor = valid_scale_factor(scale_factor);
+    let start_px = (start * scale_factor).round();
+    let end_px = ((start + width) * scale_factor).round();
+    (
+        start_px / scale_factor,
+        (end_px - start_px).max(1.0) / scale_factor,
+    )
+}
+
+#[inline]
+fn bottom_hairline_y(bottom: f32, scale_factor: f32) -> f32 {
+    let scale_factor = valid_scale_factor(scale_factor);
+    let y_px = ((bottom * scale_factor).floor() - 1.0).max(0.0);
+    y_px / scale_factor
+}
+
+#[inline]
+fn right_hairline_x(right: f32, scale_factor: f32) -> f32 {
+    (snap_to_physical_pixel(right, scale_factor) - physical_pixel(scale_factor)).max(0.0)
+}
+
 pub struct Island {
     pub hide_if_single: bool,
     /// Prefix each tab title with its 1-based visual position (`1 vim`).
@@ -604,6 +647,8 @@ impl Island {
             available_width,
             tab_width,
         } = tab_strip_layout(window_width, scale_factor, num_tabs);
+        let hairline = physical_pixel(scale_factor);
+        let bottom_border_y = bottom_hairline_y(ISLAND_HEIGHT, scale_factor);
 
         // Starting from left edge (with margin on macOS for traffic lights)
         let mut x_position = left_margin;
@@ -616,12 +661,13 @@ impl Island {
 
         // Draw bottom border for the left margin area (traffic light space on macOS)
         if left_margin > 0.0 {
+            let (x, width) = physical_pixel_span(0.0, left_margin, scale_factor);
             sugarloaf.rect(
                 None,
-                0.0,
-                ISLAND_HEIGHT - 1.0,
-                left_margin,
-                0.5,
+                x,
+                bottom_border_y,
+                width,
+                hairline,
                 self.border_color,
                 0.1,
                 0,
@@ -708,9 +754,9 @@ impl Island {
             if tab_index > 0 || (tab_index == 0 && is_active && left_margin > 0.0) {
                 sugarloaf.rect(
                     None,
-                    tab_x,
+                    snap_to_physical_pixel(tab_x, scale_factor),
                     0.0, // Start from top
-                    0.5, // 1px width
+                    hairline,
                     ISLAND_HEIGHT,
                     self.border_color,
                     0.1, // Same depth as other island elements
@@ -720,12 +766,13 @@ impl Island {
 
             // Draw bottom border for inactive tabs (active tabs have no border)
             if !is_active {
+                let (x, width) = physical_pixel_span(tab_x, tab_width, scale_factor);
                 sugarloaf.rect(
                     None,
-                    tab_x,
-                    ISLAND_HEIGHT - 1.0,
-                    tab_width,
-                    0.5, // 1px height
+                    x,
+                    bottom_border_y,
+                    width,
+                    hairline,
                     self.border_color,
                     0.1, // Same depth as other island elements
                     0,
@@ -770,12 +817,15 @@ impl Island {
             );
 
             // Left/right edges so the tab keeps its outline mid-flight.
-            for edge_x in [floating_x, floating_x + tab_width - 0.5] {
+            for edge_x in [
+                snap_to_physical_pixel(floating_x, scale_factor),
+                right_hairline_x(floating_x + tab_width, scale_factor),
+            ] {
                 sugarloaf.rect(
                     None,
                     edge_x,
                     0.0,
-                    0.5,
+                    hairline,
                     ISLAND_HEIGHT,
                     self.border_color,
                     0.1,
@@ -1268,6 +1318,10 @@ fn color_u8(c: [f32; 4]) -> [u8; 4] {
 mod tests {
     use super::*;
 
+    fn assert_close(left: f32, right: f32) {
+        assert!((left - right).abs() < 0.0001, "{left} != {right}");
+    }
+
     #[test]
     fn test_island_constants() {
         // Verify all constants are set correctly
@@ -1573,6 +1627,45 @@ mod tests {
         }
         // Zero tabs clamps the divisor.
         assert!(tab_strip_layout(1000.0, 2.0, 0).tab_width.is_finite());
+    }
+
+    #[test]
+    fn tab_hairlines_are_one_physical_pixel_at_fractional_scale() {
+        let scale = 1.25;
+        assert_close(physical_pixel(scale) * scale, 1.0);
+
+        let x = snap_to_physical_pixel(33.3, scale);
+        assert_close(x * scale, (33.3 * scale).round());
+
+        let (start, width) = physical_pixel_span(33.3, 123.4, scale);
+        assert_close(start * scale, (33.3 * scale).round());
+        assert!(width * scale >= 1.0);
+        assert_close(
+            width * scale,
+            ((33.3 + 123.4) * scale).round() - (33.3 * scale).round(),
+        );
+    }
+
+    #[test]
+    fn bottom_hairline_stays_inside_tab_strip() {
+        let scale = 1.25;
+        let y = bottom_hairline_y(ISLAND_HEIGHT, scale);
+        let height = physical_pixel(scale);
+
+        assert_close(y * scale, (y * scale).round());
+        assert_close(height * scale, 1.0);
+        assert!((y + height) * scale <= (ISLAND_HEIGHT * scale).floor());
+    }
+
+    #[test]
+    fn right_hairline_stays_inside_right_edge() {
+        let scale = 1.5;
+        let right = 101.3;
+        let x = right_hairline_x(right, scale);
+        let width = physical_pixel(scale);
+
+        assert_close(x * scale, (x * scale).round());
+        assert_close((x + width) * scale, (right * scale).round());
     }
 
     #[test]
