@@ -2,7 +2,9 @@ name: MNC Build
 
 # Fork-only pipeline (cmoron/rio). Self-contained: no goreleaser-pro, no secrets.
 # - push on `mnc`          -> build macOS arm64 + Windows x86_64, upload artifacts
-# - push tag `mnc-v*`      -> same build, then publish a GitHub Release with the binaries
+# - push tag `mnc-v*`      -> same build, then release ONLY the Windows binary.
+#   macOS is built for validation but NOT released (a bare unsigned binary is a
+#   poor macOS install vehicle); deploy it locally with `make install-macos`.
 on:
   push:
     branches: [mnc]
@@ -59,19 +61,20 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Only the Windows artifact is published. macOS is built (validation)
+      # but deployed locally via `make install-macos`, not from a download.
       - uses: actions/download-artifact@v4
         with:
+          name: rio-windows-x86_64
           path: dist
-          merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*
           tag_name: ${{ github.ref_name }}
           name: Rio mnc ${{ github.ref_name }}
           body: |
-            Build mnc de rio (`${{ github.ref_name }}`) — macOS arm64 + Windows x86_64.
+            Build mnc de rio (`${{ github.ref_name }}`) — **Windows x86_64**.
 
-            **macOS** : binaire non signé, dé-quarantaine avant lancement :
-            `chmod +x rio-macos-arm64 && xattr -dr com.apple.quarantine rio-macos-arm64`
+            macOS : build local (`make install-macos`), pas de binaire publié ici.
           generate_release_notes: false
           fail_on_unmatched_files: true
