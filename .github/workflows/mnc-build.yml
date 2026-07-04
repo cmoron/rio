@@ -2,12 +2,13 @@ name: MNC Build
 
 # Fork-only pipeline (cmoron/rio). Self-contained: no goreleaser-pro, no secrets.
 # - push on `mnc`          -> build macOS arm64 + Windows x86_64, upload artifacts
-# - push tag `mnc-v*`      -> same build, then release ONLY the Windows binary.
+# - push on `codex/**`     -> same build, branch-test only (no GitHub Release)
+# - push tag `mnc-v*`      -> same build, then release Windows exe + MSI.
 #   macOS is built for validation but NOT released (a bare unsigned binary is a
 #   poor macOS install vehicle); deploy it locally with `make install-macos`.
 on:
   push:
-    branches: [mnc]
+    branches: [mnc, 'codex/**']
     tags: ['mnc-v*']
   workflow_dispatch:
 
@@ -48,10 +49,35 @@ jobs:
           mkdir -p dist
           cp "target/${{ matrix.target }}/release/rio${{ matrix.ext }}" \
              "dist/rio-${{ matrix.label }}${{ matrix.ext }}"
+      - name: Build MSI
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          wix extension add -g WixToolset.UI.wixext/5.0.2
+          wix extension add -g WixToolset.Util.wixext/5.0.2
+
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "([^"]+)"').Matches[0].Groups[1].Value
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -match '^mnc-v(\d+\.\d+\.\d+)(?:-\d+)?$') {
+            $version = $Matches[1]
+          }
+
+          New-Item -ItemType Directory -Force .wix | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/rio.exe" ".wix/rio.exe" -Force
+
+          $wxs = Get-Content "misc/windows/rio.wxs" -Raw
+          $wxs = $wxs.Replace('{{ .Version }}', $version)
+          $wxs = $wxs.Replace('{{ .Binary }}', '.wix\rio')
+          Set-Content -Path ".wix/rio.generated.wxs" -Value $wxs -Encoding UTF8
+
+          wix build ".wix/rio.generated.wxs" `
+            -ext WixToolset.UI.wixext `
+            -ext WixToolset.Util.wixext `
+            -o "dist/rio-${{ matrix.label }}.msi"
       - uses: actions/upload-artifact@v4
         with:
           name: rio-${{ matrix.label }}
-          path: dist/rio-${{ matrix.label }}${{ matrix.ext }}
+          path: dist/*
           if-no-files-found: error
 
   release:
@@ -74,6 +100,10 @@ jobs:
           name: Rio mnc ${{ github.ref_name }}
           body: |
             Build mnc de rio (`${{ github.ref_name }}`) — **Windows x86_64**.
+
+            Contenu publié :
+            - `rio-windows-x86_64.exe` : binaire portable
+            - `rio-windows-x86_64.msi` : installateur Windows
 
             macOS : build local (`make install-macos`), pas de binaire publié ici.
           generate_release_notes: false
