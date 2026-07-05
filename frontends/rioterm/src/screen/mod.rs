@@ -1548,8 +1548,9 @@ impl Screen<'_> {
             return;
         }
 
-        let num_tabs = self.ctx().len().wrapping_sub(1);
-        self.resize_top_or_bottom_line(num_tabs);
+        // True remaining count — ctx().len() is already post-close here. A `- 1`
+        // dropped the island band at exactly 2 tabs (Linux/Windows) → 2 extra rows.
+        self.resize_top_or_bottom_line(self.ctx().len());
         self.mark_dirty();
     }
 
