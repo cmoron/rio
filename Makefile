@@ -92,6 +92,25 @@ install-macos: release-macos
 	rm -rf /Applications/$(APP_NAME)
 	mv ./release/$(APP_NAME) /Applications/
 
+# ── Fork perso : réinstall rapide arm64-only (jamais proposé upstream) ──
+# Setup one-shot avant la 1re fois :
+#   brew uninstall --cask rio
+#   rm -f ~/.terminfo/72/rio && tic -xe xterm-rio,rio -o ~/.terminfo $(TERMINFO)
+#   cert auto-signé "rio-dev" (trousseau login, approuvé codeSign) — une signature
+#   ad-hoc (--sign -) réinitialise les droits TCC macOS à chaque rebuild
+install-macos-arm64: ## Build + install le fork (arm64) dans /Applications + shim PATH
+	RUSTFLAGS='-C link-arg=-s' cargo build --release -p rioterm
+	rm -rf $(TARGET_DIR_OSX)/$(APP_NAME)
+	@mkdir -p $(TARGET_DIR_OSX)
+	@cp -fRp $(APP_TEMPLATE) $(TARGET_DIR_OSX)/
+	@mkdir -p $(APP_BINARY_DIR)
+	@cp -fp $(APP_BINARY) $(APP_BINARY_DIR)/
+	@codesign --force --deep --sign rio-dev "$(TARGET_DIR_OSX)/$(APP_NAME)"
+	rm -rf /Applications/$(APP_NAME)
+	cp -R "$(TARGET_DIR_OSX)/$(APP_NAME)" /Applications/
+	ln -sf /Applications/$(APP_NAME)/Contents/MacOS/$(TARGET) "$(shell brew --prefix)/bin/$(TARGET)"
+	@echo "✅ /Applications/$(APP_NAME) (fork arm64) — 'rio' dans le PATH"
+
 version-not-found:
 	@echo "Rio version was not specified"
 	@echo " - usage: $ make release-macos-signed version=0.0.0"
