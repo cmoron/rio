@@ -26,7 +26,7 @@
 | `24f6685` | feat(splits): focus directionnel h/j/k/l | 🟢 Perso | Aucune PR/issue upstream |
 | `feed9f5` | fix(macos): ⌘H n'est plus mangé par le menu Hide | 🟢 Perso | Aucune PR/issue upstream |
 | `1089a1a` | fix(tabs): initialiser un onglet depuis la taille fenêtre | 🟢 Perso | Correctif absent de `upstream/main` |
-| `5793f97` | feat(navigation): display-tab-number | 🔵 Proposé | **PR #1697 ouverte mais conflictuelle** (head `7f89076`) |
+| `5793f97` | feat(navigation): display-tab-number | 🔵 Proposé | **PR #1697 ouverte et mergeable** (head `5be6540`) |
 | `f958a02` | fix(tabs): recompute grid rows au toggle barre | 🟠 Porté | PR #1699 **fermée** (doublon) → #1632 / #1687 ouvertes |
 | `8e2f8ec` | fix(layout): refresh Taffy root si marge change | 🟠 Porté | Adopte **PR #1632** (@nikicat, ouverte) |
 | `b7f57c6` | fix(tabs): repaint après fermeture via shell exit | 🟠 Porté | **PR #1585** (@ddidderr, ouverte) |
@@ -73,9 +73,9 @@ Préfixe optionnel `1 vim`, `2 htop`… (façon ghostty). Le numéro dérive de 
 `display-tab-number` + `tab-number-separator`. Mode `Tab` uniquement (pas
 `NativeTab`).
 - **Statut :** **[PR #1697](https://github.com/raphamorim/rio/pull/1697)
-  ouverte**, sans review ni commentaire, mais conflictuelle depuis le refactor
-  tabs `c8bbf459`. `mnc` contient l'adaptation ; la branche de PR reste à
-  rebaser séparément avant mise à jour publique.
+  ouverte et mergeable**, sans review ni commentaire. Branche rebasée sur
+  `upstream/main` le 2026-07-19 (`5be6540`) après le refactor tabs `c8bbf459` ;
+  CI upstream relancée.
 
 ---
 
