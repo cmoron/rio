@@ -23,6 +23,7 @@
 
 | Commit | Patch | Décision | Statut upstream |
 |---|---|---|---|
+| `3629954` | fix(performer): sync-update timeout collé (ConPTY × 2026) | 🟢 Perso | Aucune PR/issue upstream — **prêt à proposer** |
 | `24f6685` | feat(splits): focus directionnel h/j/k/l | 🟢 Perso | Aucune PR/issue upstream |
 | `feed9f5` | fix(macos): ⌘H n'est plus mangé par le menu Hide | 🟢 Perso | Aucune PR/issue upstream |
 | `1089a1a` | fix(tabs): initialiser un onglet depuis la taille fenêtre | 🟢 Perso | Correctif absent de `upstream/main` |
@@ -38,6 +39,16 @@
 ---
 
 ## 🟢 Perso — features sans équivalent upstream
+
+### `3629954` — Latence de frappe TUI sous Windows (ConPTY × 2026)
+ConPTY ré-émet la paire `?2026h?2026l` collée avant le contenu de la frame ;
+l'ESU parsé inline ne désarmait pas `sync_state.timeout` → chaque frappe
+bufferisée jusqu'au timeout de 150 ms. Fix : clear dans le dispatch `l` +
+ré-armement dans `stop_sync_internal` (nouveau BSU). Bug latent sur toutes
+les plateformes, symptôme majeur sur Windows. Détail complet (repro, sondes,
+mesures 93 ms→2 ms) : [`conpty-sync-esu.md`](conpty-sync-esu.md).
+- **Statut :** aucune PR/issue upstream (vérifié 2026-07-21). Branche
+  `fix/sync-esu-inline-timeout` prête ; PR à ouvrir après accord.
 
 ### `24f6685` — Focus directionnel entre splits (h/j/k/l)
 Actions `selectsplit{left,right,up,down}` : focus **spatial** entre panneaux
