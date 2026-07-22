@@ -1,6 +1,6 @@
 # Patches du fork — inventaire & stratégie upstream
 
-> Statut upstream vérifié le **2026-07-19** (`gh` sur `raphamorim/rio`). Les
+> Statut upstream vérifié le **2026-07-22** (`gh` sur `raphamorim/rio`). Les
 > états de PR évoluent : re-checker avant de décider d'un push. Source de
 > vérité complémentaire = les messages de commit eux-mêmes (le « pourquoi » y
 > est souvent inline). Pour l'architecture du code, voir
@@ -27,9 +27,9 @@
 | `24f6685` | feat(splits): focus directionnel h/j/k/l | 🟢 Perso | Aucune PR/issue upstream |
 | `feed9f5` | fix(macos): ⌘H n'est plus mangé par le menu Hide | 🟢 Perso | Aucune PR/issue upstream |
 | `1089a1a` | fix(tabs): initialiser un onglet depuis la taille fenêtre | 🟢 Perso | Correctif absent de `upstream/main` |
-| `5793f97` | feat(navigation): display-tab-number | 🔵 Proposé | **PR #1697 ouverte et mergeable** (head `5be6540`) |
-| `f958a02` | fix(tabs): recompute grid rows au toggle barre | 🟠 Porté | PR #1699 **fermée** (doublon) → #1632 / #1687 ouvertes |
-| `8e2f8ec` | fix(layout): refresh Taffy root si marge change | 🟠 Porté | Adopte **PR #1632** (@nikicat, ouverte) |
+| `5793f97` | feat(navigation): display-tab-number | 🔵 Proposé | **PR #1697 ouverte** (head `5be6540`) |
+| ancien `f958a02` | fix(tabs): recompute grid rows au toggle barre | ✅ Retiré | Intégré upstream par **PR #1723** |
+| ancien `8e2f8ec` | fix(layout): refresh Taffy root si marge change | ✅ Retiré | Intégré upstream par **PR #1723** |
 | `b7f57c6` | fix(tabs): repaint après fermeture via shell exit | 🟠 Porté | **PR #1585** (@ddidderr, ouverte) |
 | ancien `53b14fd` | fix(tabs): réserver la bande island à 3→2 onglets | ✅ Retiré | Intégré upstream dans `c8bbf459` |
 | ancien `a64dc54` | fix(tabs): snap bordures aux pixels physiques | ✅ Retiré | Bordures supprimées upstream dans `c8bbf459` |
@@ -47,8 +47,8 @@ bufferisée jusqu'au timeout de 150 ms. Fix : clear dans le dispatch `l` +
 ré-armement dans `stop_sync_internal` (nouveau BSU). Bug latent sur toutes
 les plateformes, symptôme majeur sur Windows. Détail complet (repro, sondes,
 mesures 93 ms→2 ms) : [`conpty-sync-esu.md`](conpty-sync-esu.md).
-- **Statut :** aucune PR/issue upstream (vérifié 2026-07-21). Branche
-  `fix/sync-esu-inline-timeout` prête ; PR à ouvrir après accord.
+- **Statut :** aucune PR/issue upstream (vérifié 2026-07-22). Branche
+  `fix/sync-esu-inline-timeout` à rebaser et signer avant proposition.
 
 ### `24f6685` — Focus directionnel entre splits (h/j/k/l)
 Actions `selectsplit{left,right,up,down}` : focus **spatial** entre panneaux
@@ -84,36 +84,17 @@ Préfixe optionnel `1 vim`, `2 htop`… (façon ghostty). Le numéro dérive de 
 `display-tab-number` + `tab-number-separator`. Mode `Tab` uniquement (pas
 `NativeTab`).
 - **Statut :** **[PR #1697](https://github.com/raphamorim/rio/pull/1697)
-  ouverte et mergeable**, sans review ni commentaire. Branche rebasée sur
-  `upstream/main` le 2026-07-19 (`5be6540`) après le refactor tabs `c8bbf459` ;
-  CI upstream relancée.
+  ouverte**, sans review ni commentaire. Branche rebasée sur `upstream/main`
+  le 2026-07-19 (`5be6540`) après le refactor tabs `c8bbf459` ; elle reste
+  séparée de `mnc` et sera resynchronisée indépendamment si nécessaire.
 
 ---
 
 ## 🟠 Porté en attendant — un upstream existe déjà (non mergé)
 
-Ces patches corrigent de vrais bugs, mais un équivalent upstream **non mergé**
-existe. On garde notre version dans `mnc` pour l'usage quotidien ; **on droppe
-dès que l'upstream fusionne** (réconciliation au prochain rebase sur `main`).
-
-### Saga « marge de la barre d'onglets » — issue #1495
-Ouvrir/fermer un onglet montre/cache la barre → la marge top change → les
-lignes PTY n'étaient pas recalculées → le bas débordait hors fenêtre jusqu'au
-prochain resize. Deux commits locaux restent nécessaires :
-
-- **`f958a02`** — chemin `resize_top_or_bottom_line` (toggle barre d'onglets /
-  barre de recherche). Notre **PR #1699 a été fermée par nous-mêmes comme
-  doublon** de #1495, déjà adressée par #1632 et #1687 (toutes deux ouvertes).
-- **`8e2f8ec`** — chemin hot-reload de config. **Adopte la PR #1632**
-  (@nikicat) : `update_scaled_margin` laissait le root Taffy sur l'ancienne
-  aire. « À dropper quand #1632 est mergé. »
-
-Le chemin 3→2 onglets de l'ancien `53b14fd` est désormais couvert upstream :
-`close_tab` passe directement le nombre restant depuis `c8bbf459`.
-
-> Détail mémoire : la marge vit à **deux endroits** — `scaled_margin` (offset
-> de rendu) et le root Taffy (layout). Seul `resize()` resynchronise les deux
-> *et* recompte les lignes. Cf. mémoire `rio-margin-taffy-desync`.
+Ce patch corrige un vrai bug, mais un équivalent upstream **non mergé** existe.
+On garde notre version dans `mnc` pour l'usage quotidien ; **on la droppe dès
+que l'upstream fusionne** (réconciliation au prochain rebase sur `main`).
 
 ### `b7f57c6` — Repaint après fermeture d'onglet via shell exit
 Contexte retiré mais rien ne marquait `dirty` ; `render()` est gated dessus →
@@ -124,7 +105,17 @@ l'onglet fermé persistait. Fix : `request_overlay_redraw()` dans
 
 ---
 
-## ✅ Retirés au rebase du 2026-07-19
+## ✅ Retirés lors des rebases
+
+### Rebase du 2026-07-22
+
+- **`f958a02`** — le chemin `resize_top_or_bottom_line` est désormais corrigé
+  upstream par la [PR #1723](https://github.com/raphamorim/rio/pull/1723), qui
+  met à jour la marge et les dimensions de toutes les grilles.
+- **`8e2f8ec`** — la même PR appelle désormais `try_update_size` depuis
+  `update_scaled_margin`, couvrant aussi le hot-reload de configuration.
+
+### Rebase du 2026-07-19
 
 - **`53b14fd`** — le refactor tabs upstream `c8bbf459` passe déjà le vrai
   nombre d'onglets restant à `resize_top_or_bottom_line`.
