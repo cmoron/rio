@@ -1,6 +1,6 @@
 # Patches du fork — inventaire & stratégie upstream
 
-> Statut upstream vérifié le **2026-07-22** (`gh` sur `raphamorim/rio`). Les
+> Statut upstream vérifié le **2026-07-23** (`gh` sur `raphamorim/rio`). Les
 > états de PR évoluent : re-checker avant de décider d'un push. Source de
 > vérité complémentaire = les messages de commit eux-mêmes (le « pourquoi » y
 > est souvent inline). Pour l'architecture du code, voir
@@ -23,11 +23,11 @@
 
 | Commit | Patch | Décision | Statut upstream |
 |---|---|---|---|
-| `3629954` | fix(performer): sync-update timeout collé (ConPTY × 2026) | 🟢 Perso | Aucune PR/issue upstream — **prêt à proposer** |
+| `3629954` | fix(performer): sync-update timeout collé (ConPTY × 2026) | 🔵 Proposé | **Issue #1753 / PR #1754 ouverte** (head `dc89a82`) |
 | `24f6685` | feat(splits): focus directionnel h/j/k/l | 🟢 Perso | Aucune PR/issue upstream |
 | `feed9f5` | fix(macos): ⌘H n'est plus mangé par le menu Hide | 🟢 Perso | Aucune PR/issue upstream |
 | `1089a1a` | fix(tabs): initialiser un onglet depuis la taille fenêtre | 🟢 Perso | Correctif absent de `upstream/main` |
-| `5793f97` | feat(navigation): display-tab-number | 🔵 Proposé | **PR #1697 ouverte** (head `5be6540`) |
+| `5793f97` | feat(navigation): display-tab-number | 🔵 Proposé | **PR #1697 ouverte, conflictuelle** (head `5be6540`) |
 | ancien `f958a02` | fix(tabs): recompute grid rows au toggle barre | ✅ Retiré | Intégré upstream par **PR #1723** |
 | ancien `8e2f8ec` | fix(layout): refresh Taffy root si marge change | ✅ Retiré | Intégré upstream par **PR #1723** |
 | `b7f57c6` | fix(tabs): repaint après fermeture via shell exit | 🟠 Porté | **PR #1585** (@ddidderr, ouverte) |
@@ -39,16 +39,6 @@
 ---
 
 ## 🟢 Perso — features sans équivalent upstream
-
-### `3629954` — Latence de frappe TUI sous Windows (ConPTY × 2026)
-ConPTY ré-émet la paire `?2026h?2026l` collée avant le contenu de la frame ;
-l'ESU parsé inline ne désarmait pas `sync_state.timeout` → chaque frappe
-bufferisée jusqu'au timeout de 150 ms. Fix : clear dans le dispatch `l` +
-ré-armement dans `stop_sync_internal` (nouveau BSU). Bug latent sur toutes
-les plateformes, symptôme majeur sur Windows. Détail complet (repro, sondes,
-mesures 93 ms→2 ms) : [`conpty-sync-esu.md`](conpty-sync-esu.md).
-- **Statut :** aucune PR/issue upstream (vérifié 2026-07-22). Branche
-  `fix/sync-esu-inline-timeout` à rebaser et signer avant proposition.
 
 ### `24f6685` — Focus directionnel entre splits (h/j/k/l)
 Actions `selectsplit{left,right,up,down}` : focus **spatial** entre panneaux
@@ -78,15 +68,27 @@ la fenêtre.
 
 ## 🔵 Proposé — PR ouverte à notre nom
 
+### `3629954` — Latence de frappe TUI sous Windows (ConPTY × 2026)
+ConPTY ré-émet la paire `?2026h?2026l` collée avant le contenu de la frame ;
+l'ESU parsé inline ne désarmait pas `sync_state.timeout` → chaque frappe
+bufferisée jusqu'au timeout de 150 ms. Fix : clear dans le dispatch `l` +
+ré-armement dans `stop_sync_internal` (nouveau BSU). Bug latent sur toutes
+les plateformes, symptôme majeur sur Windows. Détail complet (repro, sondes,
+mesures 93 ms→2 ms) : [`conpty-sync-esu.md`](conpty-sync-esu.md).
+- **Statut :** **[issue #1753](https://github.com/raphamorim/rio/issues/1753) /
+  [PR #1754](https://github.com/raphamorim/rio/pull/1754) ouverte**,
+  mergeable ; contrôles requis pas encore verts. Branche
+  `fix/sync-esu-inline-timeout`, head signé `dc89a82`.
+
 ### `5793f97` — display-tab-number
 Préfixe optionnel `1 vim`, `2 htop`… (façon ghostty). Le numéro dérive de la
 **position de rendu** → réordonner les onglets renumérote gratuitement. Config
 `display-tab-number` + `tab-number-separator`. Mode `Tab` uniquement (pas
 `NativeTab`).
 - **Statut :** **[PR #1697](https://github.com/raphamorim/rio/pull/1697)
-  ouverte**, sans review ni commentaire. Branche rebasée sur `upstream/main`
+  ouverte**, actuellement conflictuelle. Branche rebasée sur `upstream/main`
   le 2026-07-19 (`5be6540`) après le refactor tabs `c8bbf459` ; elle reste
-  séparée de `mnc` et sera resynchronisée indépendamment si nécessaire.
+  séparée de `mnc` et sera resynchronisée indépendamment.
 
 ---
 
