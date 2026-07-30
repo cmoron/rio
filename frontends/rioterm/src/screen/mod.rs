@@ -2184,8 +2184,9 @@ impl Screen<'_> {
         // Find all matches in this line and check if point is within any of them.
         // Onig yields (byte_start, byte_end); we slice the source ourselves.
         for (start, end) in regex.find_iter(line_text) {
-            let start_col = rio_backend::crosswords::pos::Column(start);
-            let end_col = rio_backend::crosswords::pos::Column(end.saturating_sub(1));
+            let (start_idx, end_idx) = match_byte_range_to_columns(line_text, start, end);
+            let start_col = rio_backend::crosswords::pos::Column(start_idx);
+            let end_col = rio_backend::crosswords::pos::Column(end_idx);
 
             // Check if the point is within this match
             if point.col >= start_col && point.col <= end_col {
@@ -4926,9 +4927,44 @@ fn post_process_hyperlink_uri(uri: &str) -> String {
     chars.into_iter().take(end_idx + 1).collect()
 }
 
+/// Convert an onig byte-offset match range to inclusive grid columns.
+/// Every cell contributes exactly one char to the extracted line text
+/// (wide-char spacers hold ' '), so a column is a char count — using
+/// byte offsets shifts the match right past any multibyte char earlier
+/// in the line (TUI box-drawing borders, icons).
+fn match_byte_range_to_columns(
+    line_text: &str,
+    start: usize,
+    end: usize,
+) -> (usize, usize) {
+    let start_col = line_text[..start].chars().count();
+    let end_col = start_col + line_text[start..end].chars().count().saturating_sub(1);
+    (start_col, end_col)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn regex_match_columns_survive_multibyte_prefix() {
+        // TUIs draw multibyte box-drawing borders before links (3 UTF-8
+        // bytes for 1 column each). Onig reports byte offsets; feeding
+        // those straight into Column() shifted the hover highlight and
+        // the opened text right by (bytes - chars) of the prefix.
+        let line = "│ ├─ https://google.fr";
+        let regex = onig::Regex::new(r"https?://\S+").unwrap();
+        let (start, end) = regex.find_iter(line).next().unwrap();
+        assert_eq!((start, end), (11, 28), "byte offsets, not columns");
+
+        let (start_col, end_col) = match_byte_range_to_columns(line, start, end);
+        assert_eq!((start_col, end_col), (5, 21));
+
+        // ASCII-only prefix: bytes == chars, columns unchanged.
+        let line = "see: https://google.fr";
+        let (start, end) = regex.find_iter(line).next().unwrap();
+        assert_eq!(match_byte_range_to_columns(line, start, end), (5, 21));
+    }
 
     #[test]
     fn chrome_press_validates_double_click() {
