@@ -1,6 +1,6 @@
 # Patches du fork — inventaire & stratégie upstream
 
-> Statut upstream vérifié le **2026-08-04** (`upstream/main` `a8305da`, Rio
+> Statut upstream vérifié le **2026-08-04** (`upstream/main` `fe011ce`, Rio
 > 0.5.8, et `gh` sur `raphamorim/rio`). Les
 > états de PR évoluent : re-checker avant de décider d'un push. Source de
 > vérité complémentaire = les messages de commit eux-mêmes (le « pourquoi » y
@@ -25,14 +25,14 @@
 | Commit | Patch | Décision | Statut upstream |
 |---|---|---|---|
 | ancien `dc89a82` | fix(performer): sync-update timeout collé (ConPTY × 2026) | ✅ Retiré | Intégré upstream par **PR #1789** ; notre PR #1754 fermée |
-| `0a6b805` | feat(splits): focus directionnel h/j/k/l | 🟢 Perso | Aucune PR/issue upstream |
-| `4e01740` | fix(macos): ⌘H n'est plus mangé par le menu Hide | 🟢 Perso | Aucune PR/issue upstream |
-| `c38e9ad` | fix(tabs): initialiser un onglet depuis la taille fenêtre | 🟢 Perso | Correctif absent de `upstream/main` |
-| `5a2f42b` | fix(hints): convertir les offsets Onig en colonnes | 🟢 Perso | Correctif absent de `upstream/main` |
-| `e143495` | feat(navigation): display-tab-number | 🔵 Proposé | **PR #1697 ouverte**, rebasée sur Rio 0.5.8 |
+| `dc0f0cb` | feat(splits): focus directionnel h/j/k/l | 🟢 Perso | Aucune PR/issue upstream |
+| `8d34891` | fix(macos): ⌘H n'est plus mangé par le menu Hide | 🟢 Perso | Aucune PR/issue upstream |
+| `65e33d5` | fix(tabs): initialiser un onglet depuis la taille fenêtre | 🟢 Perso | Correctif absent de `upstream/main` |
+| `5ffb043` | fix(hints): convertir les offsets Onig en colonnes | 🟢 Perso | Correctif absent de `upstream/main` |
+| `d5c598b` | feat(navigation): display-tab-number | 🔵 Proposé | **PR #1697 ouverte**, rebasée sur Rio 0.5.8 |
 | ancien `f958a02` | fix(tabs): recompute grid rows au toggle barre | ✅ Retiré | Intégré upstream par **PR #1723** |
 | ancien `8e2f8ec` | fix(layout): refresh Taffy root si marge change | ✅ Retiré | Intégré upstream par **PR #1723** |
-| `67bc557` | fix(tabs): repaint après fermeture via shell exit | 🟠 Porté | **PR #1585** (@ddidderr, ouverte) |
+| `b20e99d` | fix(tabs): repaint après fermeture via shell exit | 🟠 Porté | **PR #1585** (@ddidderr, ouverte) |
 | ancien `53b14fd` | fix(tabs): réserver la bande island à 3→2 onglets | ✅ Retiré | Intégré upstream dans `c8bbf459` |
 | ancien `a64dc54` | fix(tabs): snap bordures aux pixels physiques | ✅ Retiré | Bordures supprimées upstream dans `c8bbf459` |
 | `653eb04` `dba5146` `d289fa6` `a70453c` `b018952` | ci(mnc/perso): build/release macOS+Windows | ⚫ Jamais | — |
@@ -44,7 +44,7 @@
 
 ## 🟢 Perso — features sans équivalent upstream
 
-### `0a6b805` — Focus directionnel entre splits (h/j/k/l)
+### `dc0f0cb` — Focus directionnel entre splits (h/j/k/l)
 Actions `selectsplit{left,right,up,down}` : focus **spatial** entre panneaux
 (voisin le plus proche avec recouvrement d'axe), là où `selectnext/prevsplit`
 cyclique ne suffit pas en grille 2D. Bindables au clavier, **sans keybinding
@@ -52,7 +52,7 @@ par défaut** (évite les conflits). Cœur : `layout::pick_directional`.
 - **Statut :** aucune PR upstream (`directional`, `selectsplit`, `vim split`,
   `focus pane` → rien de correspondant). Candidat propre à upstreamer si envie.
 
-### `4e01740` — macOS : ⌘H atteint les bindings config
+### `8d34891` — macOS : ⌘H atteint les bindings config
 macOS résout les key-equivalents du menu principal **avant** que `keyDown`
 n'atteigne le moteur de bindings de Rio : un `[bindings]` sur ⌘H (ex.
 `selectsplitleft`) ne se déclenchait jamais, le menu lançait Hide. On retire
@@ -60,7 +60,7 @@ l'équivalent ⌘H de l'item Hide (toujours cliquable) → ⌘H atteint la confi
 - **Touche `rio-window`** (le fork de winit), `platform_impl/macos/menu.rs`.
 - **Statut :** aucune PR/issue upstream trouvée. Perso ; upstreamable.
 
-### `c38e9ad` — Nouvel onglet initialisé depuis la taille fenêtre
+### `65e33d5` — Nouvel onglet initialisé depuis la taille fenêtre
 Après un layout Taffy, la dimension du panneau exclut les marges. La réutiliser
 pour créer l'onglet suivant retire une marge supplémentaire à chaque génération.
 Le nouveau contexte part donc de `grid_dimension()`, qui conserve la taille de
@@ -68,7 +68,7 @@ la fenêtre.
 - **Statut :** `upstream/main` réutilise encore `current.dimension` hors splits ;
   patch conservé localement.
 
-### `5a2f42b` — Offsets Onig convertis en colonnes dans les hints hover
+### `5ffb043` — Offsets Onig convertis en colonnes dans les hints hover
 
 Onig renvoie des offsets en octets UTF-8, alors que la grille attend des
 colonnes. Un caractère multioctet placé avant une URL décalait donc le test de
@@ -81,7 +81,7 @@ les caractères, comme le mode hints clavier le faisait déjà.
 
 ## 🔵 Proposé — PR ouverte à notre nom
 
-### `e143495` — display-tab-number
+### `d5c598b` — display-tab-number
 Préfixe optionnel `1 vim`, `2 htop`… (façon ghostty). Le numéro dérive de la
 **position de rendu** → réordonner les onglets renumérote gratuitement. Config
 `display-tab-number` + `tab-number-separator`. Mode `Tab` uniquement (pas
@@ -98,7 +98,7 @@ Ce patch corrige un vrai bug, mais un équivalent upstream **non mergé** existe
 On garde notre version dans `mnc` pour l'usage quotidien ; **on la droppe dès
 que l'upstream fusionne** (réconciliation au prochain rebase sur `main`).
 
-### `67bc557` — Repaint après fermeture d'onglet via shell exit
+### `b20e99d` — Repaint après fermeture d'onglet via shell exit
 Contexte retiré mais rien ne marquait `dirty` ; `render()` est gated dessus →
 l'onglet fermé persistait. Fix : `request_overlay_redraw()` dans
 `application.rs`.
