@@ -1,6 +1,8 @@
 pub mod bell;
 pub mod bindings;
-pub mod colors;
+// `colors` and `ConfigError` moved to the `rio-vt` core crate; re-export
+// so `rio_backend::config::{colors, ConfigError}` keep resolving.
+pub use rio_vt::config::{colors, ConfigError};
 pub mod defaults;
 pub mod effects;
 pub mod hints;
@@ -30,22 +32,33 @@ use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::path::PathBuf;
 use std::{default::Default, fs::File};
+#[cfg(feature = "renderer")]
 use sugarloaf::font::fonts::SugarloafFonts;
 use theme::{AdaptiveColors, AdaptiveTheme, AppearanceTheme, Theme};
 use tracing::warn;
 
-#[derive(Clone, Debug)]
-pub enum ConfigError {
-    ErrLoadingConfig(String),
-    ErrLoadingTheme(String),
-    PathNotFound,
-}
-
+/// `program` of `None` means no program was configured, so the user's default
+/// shell is used (and, on macOS, started as a login shell).
 #[derive(Default, Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct Shell {
-    pub program: String,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_program",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub program: Option<String>,
     #[serde(default)]
     pub args: Vec<String>,
+}
+
+/// `program = ""` used to be how you asked for the default shell, so keep
+/// reading it as "nothing configured" rather than trying to spawn it.
+fn deserialize_program<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let program = Option::<String>::deserialize(deserializer)?;
+    Ok(program.filter(|program| !program.is_empty()))
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
@@ -115,6 +128,7 @@ pub struct Config {
         rename = "adaptive-theme"
     )]
     pub adaptive_theme: Option<AdaptiveTheme>,
+    #[cfg(feature = "renderer")]
     #[serde(default = "SugarloafFonts::default")]
     pub fonts: SugarloafFonts,
     #[serde(default = "default_editor")]
@@ -517,6 +531,7 @@ impl Config {
             if let Some(blur) = window_overwrite.blur {
                 self.window.blur = blur;
             }
+            #[cfg(feature = "renderer")]
             if let Some(bg_image) = &window_overwrite.background_image {
                 self.window.background_image = Some(bg_image.clone());
             }
@@ -646,6 +661,7 @@ impl Default for Config {
             title: Title::default(),
             developer: Developer::default(),
             env_vars: vec![],
+            #[cfg(feature = "renderer")]
             fonts: SugarloafFonts::default(),
             line_height: default_line_height(),
             navigation: Navigation::default(),
@@ -1155,8 +1171,21 @@ mod tests {
         "#,
         );
 
-        assert_eq!(result.shell.program, "/bin/fish");
+        assert_eq!(result.shell.program.as_deref(), Some("/bin/fish"));
         assert_eq!(result.shell.args, ["--hello"]);
+    }
+
+    #[test]
+    fn test_shell_empty_program_means_default() {
+        let result = create_temporary_config(
+            "change-shell-empty-program",
+            r#"
+            shell = { program = "", args = ["--login"] }
+        "#,
+        );
+
+        assert_eq!(result.shell.program, None);
+        assert_eq!(result.shell.args, ["--login"]);
     }
 
     #[test]
@@ -1168,7 +1197,7 @@ mod tests {
         "#,
         );
 
-        assert_eq!(result.shell.program, "/bin/fish");
+        assert_eq!(result.shell.program.as_deref(), Some("/bin/fish"));
         assert_eq!(result.shell.args, Vec::<&str>::new());
     }
 
@@ -1429,7 +1458,7 @@ mod tests {
         result.overwrite_based_on_platform();
 
         // Shell should be completely replaced
-        assert_eq!(result.shell.program, "/bin/zsh");
+        assert_eq!(result.shell.program.as_deref(), Some("/bin/zsh"));
         assert_eq!(result.shell.args, vec!["-l"]);
     }
 
@@ -1560,7 +1589,7 @@ mod tests {
         assert_eq!(result.navigation.mode, navigation::NavigationMode::Tab);
 
         // Shell: completely replaced
-        assert_eq!(result.shell.program, "/bin/zsh");
+        assert_eq!(result.shell.program.as_deref(), Some("/bin/zsh"));
         assert_eq!(result.shell.args, vec!["--login"]);
     }
 

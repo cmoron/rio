@@ -190,7 +190,7 @@ impl Application<'_> {
     /// centered, sized by the configured percentages, then show it.
     fn show_quake_window(
         &mut self,
-        id: rio_window::window::WindowId,
+        id: rio_backend::event::WindowId,
         event_loop: &ActiveEventLoop,
     ) {
         #[cfg(target_os = "macos")]
@@ -213,9 +213,25 @@ impl Application<'_> {
                 * self.config.window.quake_height_percentage.clamp(0.1, 1.0))
                 as u32;
             let x = mpos.x + (msize.width.saturating_sub(width) / 2) as i32;
-            let _ = window
-                .request_inner_size(rio_window::dpi::PhysicalSize::new(width, height));
-            window.set_outer_position(rio_window::dpi::PhysicalPosition::new(x, mpos.y));
+            #[cfg(target_os = "macos")]
+            {
+                let scale = monitor.scale_factor();
+                let size: rio_window::dpi::LogicalSize<f64> =
+                    rio_window::dpi::PhysicalSize::new(width, height).to_logical(scale);
+                let pos: rio_window::dpi::LogicalPosition<f64> =
+                    rio_window::dpi::PhysicalPosition::new(x, mpos.y).to_logical(scale);
+                let _ = window.request_inner_size(size);
+                window.set_outer_position(pos);
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                let _ = window.request_inner_size(rio_window::dpi::PhysicalSize::new(
+                    width, height,
+                ));
+                window.set_outer_position(rio_window::dpi::PhysicalPosition::new(
+                    x, mpos.y,
+                ));
+            }
         }
         window.set_visible(true);
         window.focus_window();
@@ -325,7 +341,7 @@ impl ApplicationHandler<EventPayload> for Application<'_> {
         if !self.scheduler.scheduled(timer_id) {
             self.scheduler.schedule(
                 EventPayload::new(RioEventType::Rio(RioEvent::UpdateTitles), unsafe {
-                    rio_window::window::WindowId::dummy()
+                    rio_window::window::WindowId::dummy().into()
                 }),
                 Duration::from_secs(2),
                 true,
@@ -1125,6 +1141,10 @@ impl ApplicationHandler<EventPayload> for Application<'_> {
         if Self::skip_window_event(&event) {
             return;
         }
+
+        // The event loop keys on rio-window's id; the router keys on the
+        // core's `WindowId`. Convert once at this boundary.
+        let window_id: rio_backend::event::WindowId = window_id.into();
 
         let route = match self.router.routes.get_mut(&window_id) {
             Some(window) => window,
@@ -1967,7 +1987,18 @@ impl ApplicationHandler<EventPayload> for Application<'_> {
                 let focus_changed = route.window.is_focused != focused;
                 route.window.is_focused = focused;
 
-                if focus_changed {
+                // Focus is a cheap checkpoint to catch backing-scale changes
+                // whose ScaleFactorChanged never arrived (sleep/wake display
+                // reconfiguration).
+                if focused
+                    && route
+                        .window
+                        .screen
+                        .reconcile_scale(&route.window.winit_window)
+                {
+                    route.window.update_vblank_interval();
+                    route.request_redraw();
+                } else if focus_changed {
                     route.request_redraw();
                 }
 
@@ -1981,6 +2012,18 @@ impl ApplicationHandler<EventPayload> for Application<'_> {
                 // If window was occluded and is now visible, mark for one-time render
                 if was_occluded && !occluded {
                     route.window.needs_render_after_occlusion = true;
+                    // Same checkpoint as focus: the un-occlusion after wake
+                    // is often the first event the window receives.
+                    if route
+                        .window
+                        .screen
+                        .reconcile_scale(&route.window.winit_window)
+                    {
+                        route.window.update_vblank_interval();
+                    }
+                    // An idle terminal produces no PTY traffic to trigger the
+                    // deferred post-occlusion render; request it directly.
+                    route.request_redraw();
                 }
             }
 
