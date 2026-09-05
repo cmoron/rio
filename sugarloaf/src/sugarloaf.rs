@@ -1121,7 +1121,25 @@ impl Sugarloaf<'_> {
         let frame = match ctx.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame)
             | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
-            _ => {
+            status => {
+                // Same situation as the Metal drawable-acquisition
+                // failure: the embedder already consumed this frame's
+                // damage, so a silent return leaves stale content on
+                // screen until unrelated damage arrives. On DX12 the
+                // frame-latency wait can time out around window
+                // moves/resizes; `Outdated`/`Lost` additionally need
+                // the swapchain reconfigured before a retry can
+                // succeed.
+                tracing::warn!("wgpu surface acquire failed ({status:?}), retrying");
+                if matches!(
+                    status,
+                    wgpu::CurrentSurfaceTexture::Outdated
+                        | wgpu::CurrentSurfaceTexture::Lost
+                ) {
+                    let (width, height) = (ctx.size.width as u32, ctx.size.height as u32);
+                    ctx.resize(width, height);
+                }
+                self.renderer.frame_dropped = true;
                 self.reset();
                 return;
             }
