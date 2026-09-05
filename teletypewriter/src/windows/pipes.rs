@@ -396,3 +396,117 @@ impl Drop for EventedAnonWrite {
             .expect("Could not close EventedAnonWrite worker");
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use corcovado::{Events, Poll, PollOpt, Ready, Token};
+    use std::io::{Read, Write};
+    use std::time::{Duration, Instant};
+
+    // Enough 64 KiB ring cycles to hit a sub-microsecond race window
+    // reliably; a healthy run finishes in a couple of seconds.
+    const TOTAL: usize = 512 * 1024 * 1024;
+    const DEADLINE: Duration = Duration::from_secs(30);
+    fn poll_opts() -> PollOpt {
+        PollOpt::edge() | PollOpt::oneshot()
+    }
+
+    /// Regression test for a lost wakeup between the reader worker and its
+    /// consumer. The worker checked `is_full()` outside the mutex before
+    /// `Condvar::wait`; a consumer draining the ring and notifying inside
+    /// that window woke nobody, so the worker slept forever while the
+    /// consumer waited for readiness only the worker could set. In Rio this
+    /// froze a ConPTY tab for good (conhost blocked behind a full conout
+    /// pipe, wsl.exe and the Linux pty behind it). Mirrors the PTY event
+    /// loop: read only after a readiness event, drain until `Ok(0)`, re-arm.
+    #[test]
+    fn anon_read_pump_does_not_stall() {
+        let (read_pipe, mut write_pipe) = miow::pipe::anonymous(0).unwrap();
+        let writer = std::thread::spawn(move || {
+            let chunk = vec![0xA5u8; 65535];
+            let mut sent = 0;
+            while sent < TOTAL {
+                let n = chunk.len().min(TOTAL - sent);
+                write_pipe.write_all(&chunk[..n]).unwrap();
+                sent += n;
+            }
+        });
+
+        let mut reader = EventedAnonRead::new(read_pipe);
+        let poll = Poll::new().unwrap();
+        poll.register(&reader, Token(0), Ready::readable(), poll_opts())
+            .unwrap();
+        let mut events = Events::with_capacity(8);
+        let mut buf = vec![0u8; 1 << 20];
+        let mut received = 0;
+        let start = Instant::now();
+        while received < TOTAL {
+            assert!(
+                start.elapsed() < DEADLINE,
+                "reader stalled after {received} bytes: lost wakeup"
+            );
+            poll.poll(&mut events, Some(Duration::from_millis(200)))
+                .unwrap();
+            if events.is_empty() {
+                continue;
+            }
+            loop {
+                match reader.read(&mut buf) {
+                    Ok(0) => break,
+                    Ok(n) => received += n,
+                    Err(e) => panic!("read error: {e}"),
+                }
+            }
+            poll.reregister(&reader, Token(0), Ready::readable(), poll_opts())
+                .unwrap();
+        }
+        writer.join().unwrap();
+    }
+
+    /// Symmetric case for the writer worker: it checked `is_empty()` outside
+    /// the mutex before waiting, so a producer filling the ring and
+    /// notifying in that window left the worker asleep and the pipe
+    /// starved (keystrokes never reached conhost). Mirrors the PTY event
+    /// loop: write only after a writable event, re-arm.
+    #[test]
+    fn anon_write_pump_does_not_stall() {
+        let (mut read_pipe, write_pipe) = miow::pipe::anonymous(0).unwrap();
+        let drain = std::thread::spawn(move || {
+            let mut buf = vec![0u8; 1 << 20];
+            let mut received = 0;
+            while received < TOTAL {
+                match read_pipe.read(&mut buf) {
+                    Ok(0) => panic!("pipe closed after {received} bytes"),
+                    Ok(n) => received += n,
+                    Err(e) => panic!("read error: {e}"),
+                }
+            }
+        });
+
+        let mut writer = EventedAnonWrite::new(write_pipe);
+        let poll = Poll::new().unwrap();
+        poll.register(&writer, Token(0), Ready::writable(), poll_opts())
+            .unwrap();
+        let mut events = Events::with_capacity(8);
+        let chunk = vec![0x5Au8; 65535];
+        let mut sent = 0;
+        let start = Instant::now();
+        while sent < TOTAL {
+            assert!(
+                start.elapsed() < DEADLINE,
+                "writer stalled after {sent} bytes: lost wakeup"
+            );
+            poll.poll(&mut events, Some(Duration::from_millis(200)))
+                .unwrap();
+            if events.is_empty() {
+                continue;
+            }
+            let n = chunk.len().min(TOTAL - sent);
+            sent += writer.write(&chunk[..n]).unwrap();
+            poll.reregister(&writer, Token(0), Ready::writable(), poll_opts())
+                .unwrap();
+        }
+        drain.join().unwrap();
+    }
+}
