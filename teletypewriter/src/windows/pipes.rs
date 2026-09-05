@@ -96,13 +96,20 @@ impl EventedAnonRead {
                     // Write from the temp buffer into the producer
                     let mut written = 0usize;
                     while written < nbytes {
-                        // Wait for buffer to clear if need be.
-                        if producer.is_full() {
+                        // Wait for buffer to clear if need be. The predicate
+                        // is checked under the same mutex the consumer
+                        // notifies with: checked outside it, a notify landing
+                        // between the check and the wait is lost and both
+                        // sides sleep forever (frozen ConPTY tab).
+                        {
                             let mut wait_tag = inner.wait_tag.lock();
-                            inner.sig_buffer_not_full.wait(&mut wait_tag);
-                            if inner.done.load(Ordering::SeqCst) {
-                                return;
+                            while producer.is_full() && !inner.done.load(Ordering::SeqCst)
+                            {
+                                inner.sig_buffer_not_full.wait(&mut wait_tag);
                             }
+                        }
+                        if inner.done.load(Ordering::SeqCst) {
+                            return;
                         }
 
                         written += producer.write_from_slice(&tmp_buf[written..nbytes]);
@@ -160,6 +167,9 @@ impl io::Read for EventedAnonRead {
             }
         }
 
+        // Notify under the mutex so a worker between its predicate check
+        // and its wait cannot miss it.
+        let _wait_tag = self.inner.wait_tag.lock();
         self.inner.sig_buffer_not_full.notify_one();
         Ok(nbytes)
     }
@@ -195,7 +205,10 @@ impl Drop for EventedAnonRead {
     fn drop(&mut self) {
         self.inner.done.store(true, Ordering::SeqCst);
 
-        self.inner.sig_buffer_not_full.notify_one();
+        {
+            let _wait_tag = self.inner.wait_tag.lock();
+            self.inner.sig_buffer_not_full.notify_one();
+        }
 
         let thread = self.thread.take().unwrap();
 
@@ -272,15 +285,19 @@ impl EventedAnonWrite {
                         return;
                     }
 
-                    // Read into temp buffer while holding the lock
                     let nbytes = {
-                        // Wait for buffer to have contents
-                        if consumer.is_empty() {
+                        // Wait for buffer to have contents. Same
+                        // check-under-the-mutex rule as the reader worker.
+                        {
                             let mut wait_tag = inner.wait_tag.lock();
-                            inner.sig_buffer_not_empty.wait(&mut wait_tag);
-                            if inner.done.load(Ordering::SeqCst) {
-                                return;
+                            while consumer.is_empty()
+                                && !inner.done.load(Ordering::SeqCst)
+                            {
+                                inner.sig_buffer_not_empty.wait(&mut wait_tag);
                             }
+                        }
+                        if inner.done.load(Ordering::SeqCst) {
+                            return;
                         }
 
                         let nbytes = consumer.read_to_slice(&mut tmp_buf);
@@ -347,6 +364,9 @@ impl io::Write for EventedAnonWrite {
             }
         }
 
+        // Notify under the mutex so a worker between its predicate check
+        // and its wait cannot miss it.
+        let _wait_tag = self.inner.wait_tag.lock();
         self.inner.sig_buffer_not_empty.notify_one();
         Ok(nbytes)
     }
@@ -387,7 +407,10 @@ impl Drop for EventedAnonWrite {
         self.inner.done.store(true, Ordering::SeqCst);
 
         // Stop the writer thread waiting for contents
-        self.inner.sig_buffer_not_empty.notify_one();
+        {
+            let _wait_tag = self.inner.wait_tag.lock();
+            self.inner.sig_buffer_not_empty.notify_one();
+        }
 
         self.thread
             .take()
