@@ -24,7 +24,7 @@ use crate::crosswords::{
     Mode,
 };
 use crate::hints::HintState;
-use crate::layout::ContextDimension;
+use crate::layout::{ContextDimension, SplitDirection};
 use crate::mouse::{calculate_mouse_position, Mouse};
 use crate::renderer::island::{self, TabStripLayout, ISLAND_HEIGHT};
 use crate::renderer::{utils::padding_top_from_config, Renderer};
@@ -557,6 +557,10 @@ impl Screen<'_> {
         if let Some(mut island) = old_island {
             island.update_colors(config.colors.tabs, config.colors.tabs_active);
             island.max_tab_width = config.navigation.max_tab_width;
+            // Pick up live-reloaded tab-number settings (the preserved
+            // island keeps its old constructor values otherwise).
+            island.display_tab_number = config.navigation.display_tab_number;
+            island.tab_number_separator = config.navigation.tab_number_separator.clone();
             self.renderer.island = Some(island);
         }
 
@@ -1494,6 +1498,26 @@ impl Screen<'_> {
                     Act::SelectPrevSplit => {
                         self.cancel_search(clipboard);
                         self.context_manager.select_prev_split();
+                        self.mark_dirty();
+                    }
+                    Act::SelectSplitLeft => {
+                        self.cancel_search(clipboard);
+                        self.context_manager.select_split(SplitDirection::Left);
+                        self.mark_dirty();
+                    }
+                    Act::SelectSplitRight => {
+                        self.cancel_search(clipboard);
+                        self.context_manager.select_split(SplitDirection::Right);
+                        self.mark_dirty();
+                    }
+                    Act::SelectSplitUp => {
+                        self.cancel_search(clipboard);
+                        self.context_manager.select_split(SplitDirection::Up);
+                        self.mark_dirty();
+                    }
+                    Act::SelectSplitDown => {
+                        self.cancel_search(clipboard);
+                        self.context_manager.select_split(SplitDirection::Down);
                         self.mark_dirty();
                     }
                     Act::SelectNextSplitOrTab => {

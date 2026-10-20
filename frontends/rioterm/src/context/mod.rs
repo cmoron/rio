@@ -5,7 +5,7 @@ use crate::ansi::CursorShape;
 use crate::context::title::{update_title, ContextTitle};
 use crate::event::sync::FairMutex;
 use crate::event::{Msg, RioEvent};
-pub use crate::layout::{ContextDimension, ContextGrid, ContextGridItem};
+pub use crate::layout::{ContextDimension, ContextGrid, ContextGridItem, SplitDirection};
 use crate::messenger::Messenger;
 use crate::performer::{self, Machine};
 use renderable::Cursor;
@@ -655,6 +655,13 @@ impl<T: EventListener + Clone + std::marker::Send + 'static> ContextManager<T> {
     pub fn select_prev_split(&mut self) {
         self.contexts[self.current_index].select_prev_split();
         self.sync_current_route();
+    }
+
+    #[inline]
+    pub fn select_split(&mut self, dir: SplitDirection) {
+        if self.contexts[self.current_index].select_split(dir) {
+            self.sync_current_route();
+        }
     }
 
     #[inline]
@@ -1378,12 +1385,12 @@ impl<T: EventListener + Clone + std::marker::Send + 'static> ContextManager<T> {
 
             let current = self.current();
             let cursor = current.cursor_from_ref();
-            let mut dimension = current.dimension;
-
-            // If current has splits then shouldn't use that dimension
-            if self.current_grid().len() > 1 {
-                dimension = self.current_grid().grid_dimension();
-            }
+            // Rebuild from the grid's window-sized width/height rather
+            // than inheriting current.dimension: after a Taffy layout
+            // pass the panel dimension holds the content size (window
+            // minus margins), and seeding the new grid with it loses one
+            // margin per tab generation.
+            let dimension = self.current_grid().grid_dimension();
 
             match ContextManager::create_context(
                 (&cursor, current.renderable_content.has_blinking_enabled),
@@ -1513,6 +1520,30 @@ pub mod test {
         context_manager.add_context(should_redirect, 0);
         assert_eq!(context_manager.capacity, 5);
         assert_eq!(context_manager.current_index, 2);
+    }
+
+    #[test]
+    fn test_add_context_inherits_window_size_not_panel_size() {
+        let window_id: WindowId = WindowId::from(0);
+        let mut context_manager =
+            ContextManager::start_with_capacity(5, VoidListener {}, window_id).unwrap();
+
+        // Simulate a laid-out grid: grid width/height hold the window
+        // size while the panel dimension was shrunk to the content size
+        // (window minus tab-bar margin) by apply_taffy_layout.
+        let grid = &mut context_manager.contexts[0];
+        grid.width = 1200.0;
+        grid.height = 800.0;
+        grid.scaled_margin = Margin::new(28.0, 0.0, 0.0, 0.0);
+        grid.current_mut().dimension.update_width(1200.0);
+        grid.current_mut().dimension.update_height(772.0);
+
+        context_manager.add_context(false, 1);
+
+        // Seeding the new grid from the panel dimension loses one margin
+        // per tab generation (rows shrink on every tab-strip toggle).
+        assert_eq!(context_manager.contexts[1].width, 1200.0);
+        assert_eq!(context_manager.contexts[1].height, 800.0);
     }
 
     #[test]

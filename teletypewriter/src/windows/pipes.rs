@@ -96,13 +96,20 @@ impl EventedAnonRead {
                     // Write from the temp buffer into the producer
                     let mut written = 0usize;
                     while written < nbytes {
-                        // Wait for buffer to clear if need be.
-                        if producer.is_full() {
+                        // Wait for buffer to clear if need be. The predicate
+                        // is checked under the same mutex the consumer
+                        // notifies with: checked outside it, a notify landing
+                        // between the check and the wait is lost and both
+                        // sides sleep forever (frozen ConPTY tab).
+                        {
                             let mut wait_tag = inner.wait_tag.lock();
-                            inner.sig_buffer_not_full.wait(&mut wait_tag);
-                            if inner.done.load(Ordering::SeqCst) {
-                                return;
+                            while producer.is_full() && !inner.done.load(Ordering::SeqCst)
+                            {
+                                inner.sig_buffer_not_full.wait(&mut wait_tag);
                             }
+                        }
+                        if inner.done.load(Ordering::SeqCst) {
+                            return;
                         }
 
                         written += producer.write_from_slice(&tmp_buf[written..nbytes]);
@@ -160,6 +167,9 @@ impl io::Read for EventedAnonRead {
             }
         }
 
+        // Notify under the mutex so a worker between its predicate check
+        // and its wait cannot miss it.
+        let _wait_tag = self.inner.wait_tag.lock();
         self.inner.sig_buffer_not_full.notify_one();
         Ok(nbytes)
     }
@@ -195,7 +205,10 @@ impl Drop for EventedAnonRead {
     fn drop(&mut self) {
         self.inner.done.store(true, Ordering::SeqCst);
 
-        self.inner.sig_buffer_not_full.notify_one();
+        {
+            let _wait_tag = self.inner.wait_tag.lock();
+            self.inner.sig_buffer_not_full.notify_one();
+        }
 
         let thread = self.thread.take().unwrap();
 
@@ -272,15 +285,19 @@ impl EventedAnonWrite {
                         return;
                     }
 
-                    // Read into temp buffer while holding the lock
                     let nbytes = {
-                        // Wait for buffer to have contents
-                        if consumer.is_empty() {
+                        // Wait for buffer to have contents. Same
+                        // check-under-the-mutex rule as the reader worker.
+                        {
                             let mut wait_tag = inner.wait_tag.lock();
-                            inner.sig_buffer_not_empty.wait(&mut wait_tag);
-                            if inner.done.load(Ordering::SeqCst) {
-                                return;
+                            while consumer.is_empty()
+                                && !inner.done.load(Ordering::SeqCst)
+                            {
+                                inner.sig_buffer_not_empty.wait(&mut wait_tag);
                             }
+                        }
+                        if inner.done.load(Ordering::SeqCst) {
+                            return;
                         }
 
                         let nbytes = consumer.read_to_slice(&mut tmp_buf);
@@ -347,6 +364,9 @@ impl io::Write for EventedAnonWrite {
             }
         }
 
+        // Notify under the mutex so a worker between its predicate check
+        // and its wait cannot miss it.
+        let _wait_tag = self.inner.wait_tag.lock();
         self.inner.sig_buffer_not_empty.notify_one();
         Ok(nbytes)
     }
@@ -387,12 +407,129 @@ impl Drop for EventedAnonWrite {
         self.inner.done.store(true, Ordering::SeqCst);
 
         // Stop the writer thread waiting for contents
-        self.inner.sig_buffer_not_empty.notify_one();
+        {
+            let _wait_tag = self.inner.wait_tag.lock();
+            self.inner.sig_buffer_not_empty.notify_one();
+        }
 
         self.thread
             .take()
             .unwrap()
             .join()
             .expect("Could not close EventedAnonWrite worker");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use corcovado::{Events, Poll, PollOpt, Ready, Token};
+    use std::io::{Read, Write};
+    use std::time::{Duration, Instant};
+
+    // Enough 64 KiB ring cycles to hit a sub-microsecond race window
+    // reliably; a healthy run finishes in a couple of seconds.
+    const TOTAL: usize = 512 * 1024 * 1024;
+    const DEADLINE: Duration = Duration::from_secs(30);
+    fn poll_opts() -> PollOpt {
+        PollOpt::edge() | PollOpt::oneshot()
+    }
+
+    /// Regression test for a lost wakeup between the reader worker and its
+    /// consumer. The worker checked `is_full()` outside the mutex before
+    /// `Condvar::wait`; a consumer draining the ring and notifying inside
+    /// that window woke nobody, so the worker slept forever while the
+    /// consumer waited for readiness only the worker could set. In Rio this
+    /// froze a ConPTY tab for good (conhost blocked behind a full conout
+    /// pipe, wsl.exe and the Linux pty behind it). Mirrors the PTY event
+    /// loop: read only after a readiness event, drain until `Ok(0)`, re-arm.
+    #[test]
+    fn anon_read_pump_does_not_stall() {
+        let (read_pipe, mut write_pipe) = miow::pipe::anonymous(0).unwrap();
+        let writer = std::thread::spawn(move || {
+            let chunk = vec![0xA5u8; 65535];
+            let mut sent = 0;
+            while sent < TOTAL {
+                let n = chunk.len().min(TOTAL - sent);
+                write_pipe.write_all(&chunk[..n]).unwrap();
+                sent += n;
+            }
+        });
+
+        let mut reader = EventedAnonRead::new(read_pipe);
+        let poll = Poll::new().unwrap();
+        poll.register(&reader, Token(0), Ready::readable(), poll_opts())
+            .unwrap();
+        let mut events = Events::with_capacity(8);
+        let mut buf = vec![0u8; 1 << 20];
+        let mut received = 0;
+        let start = Instant::now();
+        while received < TOTAL {
+            assert!(
+                start.elapsed() < DEADLINE,
+                "reader stalled after {received} bytes: lost wakeup"
+            );
+            poll.poll(&mut events, Some(Duration::from_millis(200)))
+                .unwrap();
+            if events.is_empty() {
+                continue;
+            }
+            loop {
+                match reader.read(&mut buf) {
+                    Ok(0) => break,
+                    Ok(n) => received += n,
+                    Err(e) => panic!("read error: {e}"),
+                }
+            }
+            poll.reregister(&reader, Token(0), Ready::readable(), poll_opts())
+                .unwrap();
+        }
+        writer.join().unwrap();
+    }
+
+    /// Symmetric case for the writer worker: it checked `is_empty()` outside
+    /// the mutex before waiting, so a producer filling the ring and
+    /// notifying in that window left the worker asleep and the pipe
+    /// starved (keystrokes never reached conhost). Mirrors the PTY event
+    /// loop: write only after a writable event, re-arm.
+    #[test]
+    fn anon_write_pump_does_not_stall() {
+        let (mut read_pipe, write_pipe) = miow::pipe::anonymous(0).unwrap();
+        let drain = std::thread::spawn(move || {
+            let mut buf = vec![0u8; 1 << 20];
+            let mut received = 0;
+            while received < TOTAL {
+                match read_pipe.read(&mut buf) {
+                    Ok(0) => panic!("pipe closed after {received} bytes"),
+                    Ok(n) => received += n,
+                    Err(e) => panic!("read error: {e}"),
+                }
+            }
+        });
+
+        let mut writer = EventedAnonWrite::new(write_pipe);
+        let poll = Poll::new().unwrap();
+        poll.register(&writer, Token(0), Ready::writable(), poll_opts())
+            .unwrap();
+        let mut events = Events::with_capacity(8);
+        let chunk = vec![0x5Au8; 65535];
+        let mut sent = 0;
+        let start = Instant::now();
+        while sent < TOTAL {
+            assert!(
+                start.elapsed() < DEADLINE,
+                "writer stalled after {sent} bytes: lost wakeup"
+            );
+            poll.poll(&mut events, Some(Duration::from_millis(200)))
+                .unwrap();
+            if events.is_empty() {
+                continue;
+            }
+            let n = chunk.len().min(TOTAL - sent);
+            sent += writer.write(&chunk[..n]).unwrap();
+            poll.reregister(&writer, Token(0), Ready::writable(), poll_opts())
+                .unwrap();
+        }
+        drain.join().unwrap();
     }
 }
