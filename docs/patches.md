@@ -1,7 +1,7 @@
 # Patches du fork — inventaire & stratégie upstream
 
-> Statut upstream vérifié le **2026-08-04** (`upstream/main` `d069d57`, Rio
-> 0.5.8, et `gh` sur `raphamorim/rio`). Les
+> Statut upstream vérifié le **2026-10-20** (`upstream/main` `59203cc`, Rio
+> 0.5.28, et `gh` sur `raphamorim/rio`). Les
 > états de PR évoluent : re-checker avant de décider d'un push. Source de
 > vérité complémentaire = les messages de commit eux-mêmes (le « pourquoi » y
 > est souvent inline). Pour l'architecture du code, voir
@@ -24,35 +24,35 @@
 
 | Commit | Patch | Décision | Statut upstream |
 |---|---|---|---|
+| `f52732e` | feat(splits): focus directionnel h/j/k/l | 🟢 Perso | Aucune PR ; demande ouverte **#1549** |
+| `81bcce7` | fix(macos): ⌘H n'est plus mangé par le menu Hide | 🟢 Perso | Aucune PR/issue upstream |
+| `c5bcb01` | fix(tabs): initialiser un onglet depuis la taille fenêtre | 🟢 Perso | Correctif absent de `upstream/main` |
+| `b534db8` | fix(sugarloaf): retenter la frame si l'acquire wgpu échoue | 🟢 Perso | Aucune PR ; upstreamable |
+| `2d287b6` `b3933e6` | fix(teletypewriter): réveils Condvar perdus (pipes Windows) | 🟢 Perso | Aucune PR ; upstreamable |
+| `9e82687` | feat(navigation): display-tab-number | 🔵 Proposé | **PR #1697 ouverte**, rebasée sur Rio 0.5.28 |
+| `99678d8` | fix(tabs): repaint après fermeture via shell exit | 🟠 Porté | **PR #1585** (@ddidderr, ouverte) |
+| ancien `a11479e` | fix(hints): offsets Onig → colonnes (hover) | ✅ Retiré | Intégré upstream par **PR #1884** |
 | ancien `dc89a82` | fix(performer): sync-update timeout collé (ConPTY × 2026) | ✅ Retiré | Intégré upstream par **PR #1789** ; notre PR #1754 fermée |
-| `d678012` | feat(splits): focus directionnel h/j/k/l | 🟢 Perso | Aucune PR/issue upstream |
-| `f7538c3` | fix(macos): ⌘H n'est plus mangé par le menu Hide | 🟢 Perso | Aucune PR/issue upstream |
-| `fa220cf` | fix(tabs): initialiser un onglet depuis la taille fenêtre | 🟢 Perso | Correctif absent de `upstream/main` |
-| `a11479e` | fix(hints): convertir les offsets Onig en colonnes | 🟢 Perso | Correctif absent de `upstream/main` |
-| `2bfc6a8` | feat(navigation): display-tab-number | 🔵 Proposé | **PR #1697 ouverte**, rebasée sur Rio 0.5.8 |
-| ancien `f958a02` | fix(tabs): recompute grid rows au toggle barre | ✅ Retiré | Intégré upstream par **PR #1723** |
-| ancien `8e2f8ec` | fix(layout): refresh Taffy root si marge change | ✅ Retiré | Intégré upstream par **PR #1723** |
-| `3156f4d` | fix(tabs): repaint après fermeture via shell exit | 🟠 Porté | **PR #1585** (@ddidderr, ouverte) |
-| ancien `53b14fd` | fix(tabs): réserver la bande island à 3→2 onglets | ✅ Retiré | Intégré upstream dans `c8bbf459` |
-| ancien `a64dc54` | fix(tabs): snap bordures aux pixels physiques | ✅ Retiré | Bordures supprimées upstream dans `c8bbf459` |
-| `653eb04` `dba5146` `d289fa6` `a70453c` `b018952` | ci(mnc/perso): build/release macOS+Windows | ⚫ Jamais | — |
-| `50bd85e` | chore(mnc): compatibilité Clippy Rust 1.96 | ⚫ Jamais | Quality gate du fork |
-| `f82d962` | chore(mnc): AGENTS + outillage du fork | ⚫ Jamais | — |
-| `a3d5f26` (+ ces docs) | docs(mnc): workflow, archi, patches | ⚫ Jamais | — |
+| ancien `f958a02` `8e2f8ec` | fix(tabs/layout): marge et grille au toggle barre | ✅ Retiré | Intégré upstream par **PR #1723** |
+| ancien `53b14fd` `a64dc54` | fix(tabs): island 3→2 onglets, snap bordures | ✅ Retiré | Absorbé par le refactor upstream `c8bbf459` |
+| `730b9ed` | ci(mnc): build/release macOS + Windows MSI | ⚫ Jamais | — |
+| `84c4b45` | chore(mnc): AGENTS + outillage du fork | ⚫ Jamais | — |
+| `141f158` | chore(mnc): Clippy strict propre sous Linux | ⚫ Jamais | Quality gate du fork |
+| `db76218` (+ ces docs) | docs(mnc): workflow, archi, patches | ⚫ Jamais | — |
 
 ---
 
 ## 🟢 Perso — features sans équivalent upstream
 
-### `d678012` — Focus directionnel entre splits (h/j/k/l)
+### `f52732e` — Focus directionnel entre splits (h/j/k/l)
 Actions `selectsplit{left,right,up,down}` : focus **spatial** entre panneaux
 (voisin le plus proche avec recouvrement d'axe), là où `selectnext/prevsplit`
 cyclique ne suffit pas en grille 2D. Bindables au clavier, **sans keybinding
 par défaut** (évite les conflits). Cœur : `layout::pick_directional`.
-- **Statut :** aucune PR upstream (`directional`, `selectsplit`, `vim split`,
-  `focus pane` → rien de correspondant). Candidat propre à upstreamer si envie.
+- **Statut :** aucune PR upstream ; la demande **#1549** (navigation
+  directionnelle entre splits) est ouverte. Candidat propre à upstreamer.
 
-### `f7538c3` — macOS : ⌘H atteint les bindings config
+### `81bcce7` — macOS : ⌘H atteint les bindings config
 macOS résout les key-equivalents du menu principal **avant** que `keyDown`
 n'atteigne le moteur de bindings de Rio : un `[bindings]` sur ⌘H (ex.
 `selectsplitleft`) ne se déclenchait jamais, le menu lançait Hide. On retire
@@ -60,7 +60,7 @@ l'équivalent ⌘H de l'item Hide (toujours cliquable) → ⌘H atteint la confi
 - **Touche `rio-window`** (le fork de winit), `platform_impl/macos/menu.rs`.
 - **Statut :** aucune PR/issue upstream trouvée. Perso ; upstreamable.
 
-### `fa220cf` — Nouvel onglet initialisé depuis la taille fenêtre
+### `c5bcb01` — Nouvel onglet initialisé depuis la taille fenêtre
 Après un layout Taffy, la dimension du panneau exclut les marges. La réutiliser
 pour créer l'onglet suivant retire une marge supplémentaire à chaque génération.
 Le nouveau contexte part donc de `grid_dimension()`, qui conserve la taille de
@@ -68,27 +68,35 @@ la fenêtre.
 - **Statut :** `upstream/main` réutilise encore `current.dimension` hors splits ;
   patch conservé localement.
 
-### `a11479e` — Offsets Onig convertis en colonnes dans les hints hover
+### `b534db8` — Retenter la frame quand l'acquire de surface wgpu échoue
 
-Onig renvoie des offsets en octets UTF-8, alors que la grille attend des
-colonnes. Un caractère multioctet placé avant une URL décalait donc le test de
-survol, le soulignement et le texte cliqué. Le chemin hover compte désormais
-les caractères, comme le mode hints clavier le faisait déjà.
-- **Statut :** bug toujours présent dans `upstream/main`, branche conservée
-  localement sans PR.
+`render_wgpu` abandonnait silencieusement la frame quand `get_current_texture`
+échouait, après que l'embedder avait déjà consommé les damages : écran figé
+jusqu'au prochain trafic PTY (DX12, autour des move/resize). La perte passe
+désormais par `frame_dropped`, comme le chemin Metal.
+- **Statut :** aucune PR upstream. Upstreamable.
+
+### `2d287b6` `b3933e6` — Réveils Condvar perdus dans les pipes Windows
+
+Les workers `EventedAnonRead`/`EventedAnonWrite` testaient leur prédicat hors
+mutex puis attendaient ; une notification tombant entre les deux était perdue
+et le worker dormait pour toujours → TUI gelée après move/resize sous Windows.
+Test de stress + fix.
+- **Statut :** aucune PR/issue upstream. Upstreamable.
 
 ---
 
 ## 🔵 Proposé — PR ouverte à notre nom
 
-### `2bfc6a8` — display-tab-number
+### `9e82687` — display-tab-number
 Préfixe optionnel `1 vim`, `2 htop`… (façon ghostty). Le numéro dérive de la
 **position de rendu** → réordonner les onglets renumérote gratuitement. Config
 `display-tab-number` + `tab-number-separator`. Mode `Tab` uniquement (pas
 `NativeTab`).
 - **Statut :** **[PR #1697](https://github.com/raphamorim/rio/pull/1697)
-  ouverte**. Branche rebasée sur `main` 0.5.8 le 2026-08-04 après les refactors
-  tabs, puis mergée dans `mnc`.
+  ouverte**. Rebasée sur `main` 0.5.28 le 2026-10-20 : le titre de base vient
+  désormais de `displayed_title_for_tab` (chaîne partagée avec la titlebar
+  native upstream), le préfixe n'est appliqué que dans la barre d'onglets.
 
 ---
 
@@ -98,7 +106,7 @@ Ce patch corrige un vrai bug, mais un équivalent upstream **non mergé** existe
 On garde notre version dans `mnc` pour l'usage quotidien ; **on la droppe dès
 que l'upstream fusionne** (réconciliation au prochain rebase sur `main`).
 
-### `3156f4d` — Repaint après fermeture d'onglet via shell exit
+### `99678d8` — Repaint après fermeture d'onglet via shell exit
 Contexte retiré mais rien ne marquait `dirty` ; `render()` est gated dessus →
 l'onglet fermé persistait. Fix : `request_overlay_redraw()` dans
 `application.rs`.
@@ -108,6 +116,18 @@ l'onglet fermé persistait. Fix : `request_overlay_redraw()` dans
 ---
 
 ## ✅ Retirés lors des rebases
+
+### Reconstruction du 2026-10-20 (Rio 0.5.8 → 0.5.28)
+
+`mnc` reconstruite depuis `main` au lieu d'empiler un nouveau rebase (l'ancien
+historique contenait chaque patch en 2-3 exemplaires). Sauvegarde locale :
+`backup/2026-10-20/*`.
+
+- **`a11479e`** — la [PR #1884](https://github.com/raphamorim/rio/pull/1884)
+  ancre désormais les matches hover sur une table octet → cellule
+  (`hints.rs`) ; branche `fix/hint-hover-byte-columns` supprimée.
+- Les commits `ci`/`chore`/`docs(mnc)` successifs sont consolidés en un commit
+  par catégorie.
 
 ### Rebase du 2026-08-04
 
@@ -139,23 +159,23 @@ l'onglet fermé persistait. Fix : `request_overlay_redraw()` dans
 
 ## ⚫ Jamais upstream
 
-### `ci(mnc)` / `ci(perso)` — pipeline de build/release du fork
-`653eb04` `dba5146` `d289fa6` `a70453c` `b018952` : build/release macOS arm64
-+ Windows MSI (sans GoReleaser), préfixe `ci(mnc)`. Pure tuyauterie de fork,
-**jamais** proposée upstream.
+### `730b9ed` — pipeline de build/release du fork
+Build macOS arm64 + release Windows exe/MSI (sans GoReleaser) sur tag
+`mnc-v*`. Pure tuyauterie de fork, **jamais** proposée upstream.
 
-### `f82d962` — outillage du fork
+### `84c4b45` — outillage du fork
 
-Instructions `AGENTS.md` et cibles Makefile propres à notre workflow. Conservé
+Instructions `AGENTS.md` et cible Makefile `install-macos-arm64`. Conservé
 uniquement dans `mnc`.
 
-### `50bd85e` — quality gate Rust 1.96
+### `141f158` — quality gate Clippy sous Linux
 
-Ajustements mécaniques exigés par les nouveaux lints Clippy de Rust 1.96 sous
-Linux. Conservés dans `mnc` tant qu'upstream ne les a pas absorbés.
+`make lint` (clippy `-D warnings`) tourne sous Linux/WSL, où upstream laisse
+des bindings macOS-only inutilisés et déclenche des lints récents dans le
+backend x11. Ajustements mécaniques, sans changement de comportement.
 
 ### `docs(mnc)` — documentation interne
-`a3d5f26` (workflow, deps, map) + `docs/architecture.md` + ce fichier.
+`db76218` : `CLAUDE.md`, `docs/architecture.md`, ce fichier.
 
 ---
 
